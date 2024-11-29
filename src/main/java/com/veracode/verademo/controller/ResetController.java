@@ -10,17 +10,10 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
-import java.util.List;
 import java.util.Properties;
 import java.util.Random;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import javax.servlet.ServletContext;
-
-import com.veracode.verademo.utils.Constants;
-import com.veracode.verademo.utils.User;
-import com.veracode.verademo.utils.Utils;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -31,6 +24,10 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import com.veracode.verademo.utils.Constants;
+import com.veracode.verademo.utils.User;
+import com.veracode.verademo.utils.Utils;
 
 @Controller
 @Scope("request")
@@ -92,7 +89,7 @@ public class ResetController {
 	public String processReset(
 			@RequestParam(value = "confirm", required = true) String confirm,
 			@RequestParam(value = "primary", required = false) String primary,
-			Model model) throws IOException {
+			Model model) {
 		logger.info("Entering processReset");
 
 		Connection connect = null;
@@ -242,103 +239,116 @@ public class ResetController {
 		return Utils.redirect("reset");
 	}
 
+	/**
+	 * Drop and recreate the entire database schema
+	 */
+	private void recreateDatabaseSchema() {
+		// Fetch database schema
+		logger.info("Reading database schema from file");
+		String[] schemaSql = loadFile("blab_schema.sql", new String[] { "--", "/*" }, ";");
+
+		Connection connect = null;
+		Statement stmt = null;
+		try {
+			// Get the Database Connection
+			logger.info("Getting Database connection");
+			Class.forName("com.mysql.jdbc.Driver");
+			connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
+
+			stmt = connect.createStatement();
+
+			for (String sql : schemaSql) {
+				sql = sql.trim(); // Remove any remaining whitespace
+				if (!sql.isEmpty()) {
+					logger.info("Executing: " + sql);
+					System.out.println("Executing: " + sql);
+					stmt.executeUpdate(sql);
+				}
+			}
+		} catch (ClassNotFoundException | SQLException ex) {
+			logger.error(ex);
+		} finally {
+			try {
+				if (stmt != null) {
+					stmt.close();
+				}
+			} catch (SQLException ex) {
+				logger.error(ex);
+			}
+			try {
+				if (connect != null) {
+					connect.close();
+				}
+			} catch (SQLException ex) {
+				logger.error(ex);
+			}
+		}
+	}
+
+	/**
+	 * Read a file from the non-web accessible resources directory. This overload
+	 * discards no lines and separates content by newlines.
+	 * 
+	 * @param filename Name and extension of the file to read
+	 * @return A String array containing the contents of the file broken by newlines
+	 */
 	private String[] loadFile(String filename) {
 		return loadFile(filename, new String[0], System.lineSeparator());
 	}
 
-	  private void recreateDatabaseSchema() throws IOException {
-	        logger.info("Reading database schema from file");
-	        String[] schemaSql = loadFile("blab_schema.sql", new String[] { "--", "/*" }, ";");
+	/**
+	 * Read a file from the non-web accessible resources directory
+	 * 
+	 * @param filename       Name and extension of the file to read
+	 * @param skipCharacters A String array of sequences to skip, should the lines
+	 *                       start with them
+	 * @param delimiter      A String to break the contents of the file by
+	 * @return A String array containing the contents of the file broken by the
+	 *         delimiter
+	 */
+	private String[] loadFile(String filename, String[] skipCharacters, String delimiter) {
+		String path = "/app/src/main/resources" + File.separator + filename;
 
-	        try (Connection connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
-	             Statement stmt = connect.createStatement()) {
+		String regex = "";
+		if (skipCharacters.length > 0) {
+			String skipString = String.join("|", skipCharacters);
+			skipString = skipString.replaceAll("(?=[]\\[+&!(){}^\"~*?:\\\\])", "\\\\");
+			regex = "^(" + skipString + ").*?";
+		}
 
-	            logger.info("Getting Database connection");
-	            for (String sql : schemaSql) {
-	                sql = sql.trim();
-	                if (!sql.isEmpty()) {
-	                    try {
-	                        processSqlStatement(stmt, sql);
-	                    } catch (SQLException e) {
-	                        logger.error("Error executing SQL statement: " + sql, e);
-	                        // Consider rolling back transaction here if using transactions
-	                        // throw e; //Or re-throw if you want to stop on the first error
-	                    }
-	                }
-	            }
-	        } catch (SQLException ex) {
-	            logger.error("Error recreating database schema: ", ex);
-	        }
+		String[] lines = null;
+		StringBuffer sb = new StringBuffer();
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new FileReader(path));
 
-	    }
+			String line = br.readLine();
+			while (line != null) {
+				if (line.matches(regex)) {
+					line = br.readLine();
+					continue;
+				}
 
-	    private void processSqlStatement(Statement stmt, String sql) throws SQLException {
-	        sql = sql.trim().toUpperCase();
-	        if (sql.startsWith("CREATE TABLE")) {
-	            // CREATE TABLE statements are generally safe as long as the schema file is trusted.
-	            logger.info("Executing CREATE TABLE: " + sql);
-	            System.out.println("Executing: " + sql);
-	            stmt.executeUpdate(sql);
-	        } else if (sql.startsWith("INSERT INTO")) {
-	            //Handle INSERT statements safely using PreparedStatement
-	            executeInsert(stmt, sql);
-	        } else if (sql.startsWith("UPDATE") || sql.startsWith("DELETE")) {
-	            //Handle UPDATE and DELETE statements safely using PreparedStatement
-	            //  This requires parsing the SQL to extract parameters (complex!)
-	            logger.warn("UPDATE/DELETE statements are not safely handled by this method and may cause issues. Please change your schema to use other DDL");
-	        } else if (sql.startsWith("CREATE INDEX") || sql.startsWith("ALTER TABLE")) {
-	            //Other DDL commands that might be safe (but still need careful review)
-	            logger.info("Executing DDL: " + sql);
-	            System.out.println("Executing: " + sql);
-	            stmt.executeUpdate(sql);
-	        } else {
-	            logger.warn("Unsupported SQL statement type: " + sql);
-	        }
-	    }
+				sb.append(line);
+				sb.append(System.lineSeparator());
 
+				line = br.readLine();
+			}
 
-	    private void executeInsert(Statement stmt, String sql) throws SQLException {
-	        //This is a VERY simplified example!  You'll need robust parsing for real-world use.
-	        String[] parts = sql.split("\\(", 2);
-	        String tableName = parts[0].substring(12).trim();
-	        String valuesPart = parts[1].substring(0, parts[1].length() - 1);
-	        String[] values = valuesPart.split(",");
+			// Break content by delimiter
+			lines = sb.toString().split(delimiter);
+		} catch (IOException ex) {
+			logger.error(ex);
+		} finally {
+			try {
+				if (br != null) {
+					br.close();
+				}
+			} catch (IOException ex) {
+				logger.error(ex);
+			}
+		}
 
-	        //  Assume 3 columns for simplicity (adapt as needed!)
-	        String insertSql = "INSERT INTO " + tableName + " VALUES (?, ?, ?)";
-	        try (PreparedStatement pstmt = stmt.getConnection().prepareStatement(insertSql)) {
-	            for (int i = 0; i < values.length; i++) {
-	                pstmt.setString(i + 1, values[i].trim()); // VERY basic parameter setting; handle datatypes correctly!
-	            }
-	            pstmt.executeUpdate();
-	        }
-	    }
-
-    private boolean isValidSchemaStatement(String sql) {
-        if (sql == null || sql.isEmpty()) {
-            return false;
-        }
-
-        String upperSql = sql.toUpperCase();
-        List<String> validPrefixes = List.of("CREATE ", "DROP ", "ALTER ", "INSERT ", "DELETE ");
-        return validPrefixes.stream().anyMatch(upperSql::startsWith);
-    }
-
-    private String[] loadFile(String filename, String[] skipCharacters, String delimiter) {
-        String path = "/app/src/main/resources" + File.separator + filename;
-
-        String regex = skipCharacters.length > 0
-                ? "^(?:" + Pattern.quote(String.join("|", skipCharacters)) + ").*?$"
-                : "";
-
-        try (BufferedReader br = new BufferedReader(new FileReader(path))) {
-            return br.lines()
-                    .filter(line -> !line.matches(regex)) 
-                    .collect(Collectors.joining(System.lineSeparator()))
-                    .split(delimiter);
-        } catch (IOException ex) {
-            logger.error("Error reading file: " + path, ex);
-            return new String[0];
-        }
-    }
+		return lines;
+	}
 }
