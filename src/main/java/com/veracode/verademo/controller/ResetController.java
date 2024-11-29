@@ -257,9 +257,9 @@ public class ResetController {
             for (String sql : schemaSql) {
                 sql = sql.trim();
                 if (!sql.isEmpty() && isValidSchemaStatement(sql)) {
-                    try (PreparedStatement stmt = connect.prepareStatement(sql)) {
+                    try (PreparedStatement preparedStatement = connect.prepareStatement(sql)) {
                         logger.info("Executing validated SQL statement.");
-                        stmt.executeUpdate();
+                        preparedStatement.executeUpdate();
                     } catch (SQLException ex) {
                         logger.error("SQL execution failed for statement: " + sql, ex);
                     }
