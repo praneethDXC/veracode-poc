@@ -243,34 +243,31 @@ public class ResetController {
 	 * Drop and recreate the entire database schema
 	 */
 	private void recreateDatabaseSchema() {
-		// Fetch database schema
 		logger.info("Reading database schema from file");
 		String[] schemaSql = loadFile("blab_schema.sql", new String[] { "--", "/*" }, ";");
-
+ 
 		Connection connect = null;
-		Statement stmt = null;
+		PreparedStatement pstmt = null;
 		try {
-			// Get the Database Connection
 			logger.info("Getting Database connection");
 			Class.forName("com.mysql.jdbc.Driver");
 			connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
-
-			stmt = connect.createStatement();
-
+ 
 			for (String sql : schemaSql) {
-				sql = sql.trim(); // Remove any remaining whitespace
-				if (!sql.isEmpty()) {
-					logger.info("Executing: " + sql);
-					System.out.println("Executing: " + sql);
-					stmt.executeUpdate(sql);
+				sql = sql.trim();
+				if (!sql.isEmpty() && isValidSchemaStatement(sql)) {
+					logger.info("Executing validated SQL statement.");
+					pstmt = connect.prepareStatement(sql);
+					int rowsUpdated = pstmt.executeUpdate();
+					logger.info("Rows Updated - " + rowsUpdated );
 				}
 			}
 		} catch (ClassNotFoundException | SQLException ex) {
 			logger.error(ex);
 		} finally {
 			try {
-				if (stmt != null) {
-					stmt.close();
+				if (pstmt != null) {
+					pstmt.close();
 				}
 			} catch (SQLException ex) {
 				logger.error(ex);
@@ -283,6 +280,19 @@ public class ResetController {
 				logger.error(ex);
 			}
 		}
+	}
+ 
+	private boolean isValidSchemaStatement(String sql) {
+		if (sql == null || sql.isEmpty()) {
+			return false;
+		}
+ 
+		String upperSql = sql.toUpperCase();
+		return upperSql.startsWith("CREATE ") || 
+			   upperSql.startsWith("DROP ") || 
+			   upperSql.startsWith("ALTER ") ||
+			   upperSql.startsWith("INSERT ") ||
+			   upperSql.startsWith("DELETE ");
 	}
 
 	/**
