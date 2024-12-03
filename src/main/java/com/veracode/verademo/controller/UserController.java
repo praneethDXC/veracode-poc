@@ -134,7 +134,7 @@ public class UserController {
 	 * @return
 	 */
 	@RequestMapping(value = "/login", method = RequestMethod.POST)
-    public String Login(
+    public String processLogin(
             @RequestParam(value = "user", required = true) String username,
             @RequestParam(value = "password", required = true) String password,
             @RequestParam(value = "remember", required = false) String remember,
@@ -142,7 +142,7 @@ public class UserController {
             Model model,
             HttpServletRequest req,
             HttpServletResponse response) {
-        logger.info("Entering Login");
+        logger.info("Entering processLogin");
 
         // Determine eventual redirect. Do this here in case we're already logged in
         String nextView;
@@ -280,12 +280,12 @@ public class UserController {
 	}
 
 	@RequestMapping(value = "/logout", method = { RequestMethod.GET, RequestMethod.POST })
-	public String Logout(
+	public String processLogout(
 			@RequestParam(value = "type", required = false) String type,
 			Model model,
 			HttpServletRequest req,
 			HttpServletResponse response) {
-		logger.info("Entering Logout");
+		logger.info("Entering processLogout");
 
 		Utils.setSessionUserName(req, response, null);
 
@@ -303,12 +303,12 @@ public class UserController {
 	}
 
 	@RequestMapping(value = "/register", method = RequestMethod.POST)
-	public String Register(
+	public String processRegister(
 	        @RequestParam(value = "user") String username,
 	        HttpServletRequest httpRequest,
 	        HttpServletResponse httpResponse,
 	        Model model) {
-	    logger.info("Entering Register");
+	    logger.info("Entering processRegister");
 	    Utils.setSessionUserName(httpRequest, httpResponse, username);
  
 	    // Validate username format
@@ -348,7 +348,7 @@ public class UserController {
 	}
 
 	@RequestMapping(value = "/register-finish", method = RequestMethod.POST)
-    public String RegisterFinish(
+    public String processRegisterFinish(
             @RequestParam(value = "password", required = true) String password,
             @RequestParam(value = "cpassword", required = true) String cpassword,
             @RequestParam(value = "realName", required = true) String realName,
@@ -356,7 +356,7 @@ public class UserController {
             HttpServletRequest httpRequest,
             HttpServletResponse response,
             Model model) throws UnsupportedEncodingException {
-        logger.info("Entering RegisterFinish");
+        logger.info("Entering processRegisterFinish");
 
         String username = (String) httpRequest.getSession().getAttribute("username");
 
@@ -541,14 +541,14 @@ public class UserController {
 
 	@RequestMapping(value = "/profile", method = RequestMethod.POST, produces = "application/json")
 	@ResponseBody
-	public String Profile(
+	public String processProfile(
 			@RequestParam(value = "realName", required = true) String realName,
 			@RequestParam(value = "blabName", required = true) String blabName,
 			@RequestParam(value = "username", required = true) String username,
 			@RequestParam(value = "file", required = false) MultipartFile file,
 			MultipartHttpServletRequest request,
 			HttpServletResponse response) {
-		logger.info("Entering Profile");
+		logger.info("Entering processProfile");
 
 		String sessionUsername = (String) request.getSession().getAttribute("username");
 		// Ensure user is logged in

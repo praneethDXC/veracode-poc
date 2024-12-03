@@ -165,19 +165,19 @@
 
 	<!-- Fetch additional feed items -->
 	<script type="text/javascript">
-		function getmore(obj) {
-			var count = $("#feed li").length;
-			$.get("morefeed", {
-				count : count,
-				len : 10
-			}, function(data) {
-				if (data) {
-					$("#feed ul").append(data);
-				} else {
-					$(obj).remove();
-				}
-			});
-		}
-	</script>
+	        function getmore(obj) {
+	            var count = $("#feed li").length;
+	            $.get("morefeed", {
+	                count : Encode.forJavaScript(count),
+	                len : Encode.forJavaScript(10)
+	            }, function(data) {
+	                if (data) {
+	                    $("#feed ul").append(Encode.forJavaScript(data));
+	                } else {
+	                    $(obj).remove();
+	                }
+	            });
+	        }
+	 </script>
 </body>
 </html>

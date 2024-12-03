@@ -197,7 +197,7 @@ public class BlabController {
 	            logger.error(ex);
 	        }
 
-	        return ret.toString();
+	        return Encode.forHtml(ret.toString());
 	    }
 	    @RequestMapping(value = "/feed", method = RequestMethod.POST)
 	    public String processFeed(
