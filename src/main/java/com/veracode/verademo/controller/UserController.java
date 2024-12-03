@@ -613,11 +613,15 @@ public class UserController {
 	            }
 
 	            String extension = sanitizedFileName.substring(sanitizedFileName.lastIndexOf("."));
-	            String path = imageDir + username + extension;
+	            Path basePath = Paths.get(imageDir).toRealPath();
+	            Path userPath = basePath.resolve(username + extension).normalize();
+	            if (!userPath.startsWith(basePath)) {
+	                throw new SecurityException("Unauthorized file access attempt!");
+	            }
 
-	            logger.info("Saving new profile image: " + path);
+	            logger.info("Saving new profile image: " + userPath.toString());
 
-	            file.transferTo(new File(path));
+	            file.transferTo(userPath.toFile());
 	        } catch (IllegalStateException | IOException ex) {
 	            logger.error(ex);
 	        }
@@ -631,7 +635,7 @@ public class UserController {
 	}
 
 	private boolean isValidFileName(String fileName) {
-	    return fileName.matches("^[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|gif|bmp|txt|json)$");
+	    return fileName.matches("^[a-zA-Z0-9._-]+\\.(txt|json|jpg|gif|png)$");
 	}
 
 	@RequestMapping(value = "/downloadprofileimage", method = RequestMethod.GET)
