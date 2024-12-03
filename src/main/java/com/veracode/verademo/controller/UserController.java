@@ -11,8 +11,10 @@ import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -650,7 +652,13 @@ public class UserController {
 		}
 
 		Path baseDir = Paths.get(context.getRealPath("/resources/images")).normalize();
-		Path imagePath = baseDir.resolve(imageName).normalize();
+		Path imagePath;
+		try {
+			imagePath = baseDir.resolve(imageName).toRealPath();
+		} catch (IOException e) {
+			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			return "profile";
+		}
 
 		if (!imagePath.startsWith(baseDir)) {
 			response.setStatus(HttpServletResponse.SC_FORBIDDEN);
@@ -659,11 +667,8 @@ public class UserController {
 
 		logger.info("Fetching profile image: " + imagePath);
 
-		InputStream inputStream = null;
-		OutputStream outStream = null;
-		try {
-			File downloadFile = imagePath.toFile();
-			inputStream = new FileInputStream(downloadFile);
+		try (InputStream inputStream = new FileInputStream(imagePath.toFile());
+				OutputStream outStream = response.getOutputStream()) {
 
 			String mimeType = context.getMimeType(imagePath.toString());
 			if (mimeType == null) {
@@ -672,34 +677,17 @@ public class UserController {
 			logger.info("MIME type: " + mimeType);
 
 			response.setContentType(mimeType);
-			response.setContentLength((int) downloadFile.length());
+			response.setContentLength((int) imagePath.toFile().length());
 			response.setHeader("Content-Disposition", "attachment; filename=" + imageName);
 
-			outStream = response.getOutputStream();
 			byte[] buffer = new byte[4096];
-			int bytesRead = -1;
-
+			int bytesRead;
 			while ((bytesRead = inputStream.read(buffer)) != -1) {
 				outStream.write(buffer, 0, bytesRead);
 			}
 			outStream.flush();
 		} catch (IllegalStateException | IOException ex) {
 			logger.error(ex);
-		} finally {
-			try {
-				if (inputStream != null) {
-					inputStream.close();
-				}
-			} catch (IOException ex) {
-				logger.error(ex);
-			}
-			try {
-				if (outStream != null) {
-					outStream.close();
-				}
-			} catch (IOException ex) {
-				logger.error(ex);
-			}
 		}
 
 		return "profile";
@@ -807,12 +795,14 @@ public class UserController {
 				logger.info("Renaming profile image from " + oldImage + " to " + newUsername + extension);
 				String path = context.getRealPath("/resources/images") + File.separator;
 
-				File oldName = new File(path + oldImage);
-				File newName = new File(path + newUsername + extension);
-				if (!oldName.getCanonicalPath().startsWith(path) || !newName.getCanonicalPath().startsWith(path)) {
+				File oldName = new File(path + oldImage).getCanonicalFile();
+				File newName = new File(path + newUsername + extension).getCanonicalFile();
+
+				if (!oldName.getPath().startsWith(path) || !newName.getPath().startsWith(path)) {
 					throw new SecurityException("Invalid file path");
 				}
-				oldName.renameTo(newName);
+
+				Files.move(oldName.toPath(), newName.toPath(), StandardCopyOption.ATOMIC_MOVE);
 			}
 
 			return true;
