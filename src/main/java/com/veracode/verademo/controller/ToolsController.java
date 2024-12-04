@@ -28,8 +28,6 @@ public class ToolsController {
 	@Autowired
 	ServletContext context;
 
-	private static final List<String> allowedFortuneFiles = Arrays.asList("literature", "computers", "science", "sports");
-
 	@RequestMapping(value = "/tools", method = RequestMethod.GET)
 	public String tools() {
 		return "tools";
@@ -69,13 +67,16 @@ public class ToolsController {
 	}
 
 	private String fortune(String fortuneFile) {
-		if (fortuneFile == null || fortuneFile.isEmpty() || !allowedFortuneFiles.contains(fortuneFile))
+
+		String directoryValidationRegex = "^[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*$";
+
+		if (fortuneFile == null || fortuneFile.isEmpty() || !fortuneFile.matches(directoryValidationRegex)) {
 			return "Invalid fortune file";
+		}
 
 		String output = "";
-
 		try {
-		    ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
+			ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
 			Process proc = pb.start();
 			proc.waitFor(5, TimeUnit.SECONDS);
 			InputStreamReader isr = new InputStreamReader(proc.getInputStream());
