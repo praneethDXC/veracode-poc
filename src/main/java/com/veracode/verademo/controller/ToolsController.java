@@ -73,9 +73,9 @@ public class ToolsController {
 			return "Invalid fortune file";
 
 		String output = "";
-		ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
 
 		try {
+		    ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
 			Process proc = pb.start();
 			proc.waitFor(5, TimeUnit.SECONDS);
 			InputStreamReader isr = new InputStreamReader(proc.getInputStream());
