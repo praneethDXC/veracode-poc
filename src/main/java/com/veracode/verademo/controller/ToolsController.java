@@ -77,7 +77,8 @@ public class ToolsController {
 		{             
 			return "Invalid fortune file"; 
 		}
-		String[] cmd = {"/bin/fortune", fortuneFile};  
+		ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
+		String[] cmd = pb.command().toArray(new String[0]);  
 		try {         
 			Process proc = Runtime.getRuntime().exec(cmd);
 			InputStreamReader isr = new InputStreamReader(proc.getInputStream());
