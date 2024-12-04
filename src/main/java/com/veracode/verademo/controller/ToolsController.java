@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletContext;
@@ -25,6 +27,8 @@ public class ToolsController {
 
 	@Autowired
 	ServletContext context;
+
+	private static final List<String> allowedFortuneFiles = Arrays.asList("literature", "computers", "science", "sports");
 
 	@RequestMapping(value = "/tools", method = RequestMethod.GET)
 	public String tools() {
@@ -65,7 +69,7 @@ public class ToolsController {
 	}
 
 	private String fortune(String fortuneFile) {
-		if (fortuneFile == null || fortuneFile.isEmpty() || !fortuneFile.matches("^[a-zA-Z0-9.-]+$"))
+		if (fortuneFile == null || fortuneFile.isEmpty() || !allowedFortuneFiles.contains(fortuneFile))
 			return "Invalid fortune file";
 
 		String output = "";
