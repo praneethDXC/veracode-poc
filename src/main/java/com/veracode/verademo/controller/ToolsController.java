@@ -31,8 +31,7 @@ public class ToolsController {
 	@Autowired
 	ServletContext context;
 
-	private static final List<String> allowedFortuneFiles = Arrays.asList("literature", "computers", "science",
-			"sports");
+	private static final Pattern FORTUNE_FILE_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]+$");
 
 	@RequestMapping(value = "/tools", method = RequestMethod.GET)
 	public String tools() {
@@ -74,6 +73,10 @@ public class ToolsController {
 
 	private String fortune(String fortuneFile) {
 		String output = "";
+		if (fortuneFile == null || !FORTUNE_FILE_PATTERN.matcher(fortuneFile).matches()) 
+		{             
+			return "Invalid fortune file"; 
+		}
 		String[] cmd = {"/bin/fortune", fortuneFile};  
 		try {         
 			Process proc = Runtime.getRuntime().exec(cmd);
