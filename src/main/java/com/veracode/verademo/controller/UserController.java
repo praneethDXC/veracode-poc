@@ -86,11 +86,11 @@ public class UserController {
 		if (httpRequest.getSession().getAttribute("username") != null) {
 			logger.info("User is already logged in - redirecting...");
 			if (target != null && !target.isEmpty() && !target.equals("null")) {
-				String safeTarget = FilenameUtils.getName(target);
-				if (!safeTarget.matches("^[a-zA-Z0-9_-]+$")) {
-					throw new IllegalArgumentException("Invalid target");
+				if (isValidRedirectTarget(target)) {
+					return "redirect:" + target;
+				} else {
+					throw new SecurityException("Invalid redirect target");
 				}
-				return "redirect:" + safeTarget;
 			} else {
 				return Utils.redirect("feed");
 			}
@@ -101,11 +101,11 @@ public class UserController {
 			Utils.setSessionUserName(httpRequest, httpResponse, user.getUserName());
 			logger.info("User is remembered - redirecting...");
 			if (target != null && !target.isEmpty() && !target.equals("null")) {
-				String safeTarget = FilenameUtils.getName(target);
-				if (!safeTarget.matches("^[a-zA-Z0-9_-]+$")) {
-					throw new IllegalArgumentException("Invalid target");
+				if (isValidRedirectTarget(target)) {
+					return "redirect:" + target;
+				} else {
+					throw new SecurityException("Invalid redirect target");
 				}
-				return "redirect:" + safeTarget;
 			} else {
 				return Utils.redirect("feed");
 			}
@@ -126,6 +126,10 @@ public class UserController {
 		model.addAttribute("username", username);
 		model.addAttribute("target", target);
 		return "login";
+	}
+
+	private boolean isValidRedirectTarget(String target) {
+		return target.matches("^[a-zA-Z0-9/_-]+$") && !target.startsWith("http://") && !target.startsWith("https://");
 	}
 
 	/**
