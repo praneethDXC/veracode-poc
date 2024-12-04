@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletContext;
@@ -29,8 +30,6 @@ public class ToolsController {
 
 	@Autowired
 	ServletContext context;
-
-	private static final List<String> allowedFortuneFiles = Arrays.asList("literature", "computers", "science", "sports");
 
 	@RequestMapping(value = "/tools", method = RequestMethod.GET)
 	public String tools() {
@@ -71,25 +70,18 @@ public class ToolsController {
 	}
 
 	private String fortune(String fortuneFile) {
-		if (fortuneFile == null || fortuneFile.isEmpty() || !allowedFortuneFiles.contains(fortuneFile))
-			return "Invalid fortune file";
-
-		Path normalizedPath = Paths.get(fortuneFile).normalize();
-		if (normalizedPath.isAbsolute() || normalizedPath.startsWith("..")) {
-			return "Invalid fortune file";
-		}
-
 		String output = "";
 		ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
-
+		Map<String, String> env = pb.environment();
+		env.forEach((key, value) -> System.out.println(key + ": " + value));
+		Process proc;
 		try {
-			Process proc = pb.start();
+			proc = pb.start();
 			proc.waitFor(5, TimeUnit.SECONDS);
+
 			InputStreamReader isr = new InputStreamReader(proc.getInputStream());
 			BufferedReader br = new BufferedReader(isr);
-
 			String line;
-
 			while ((line = br.readLine()) != null) {
 				output += line + "\n";
 			}
