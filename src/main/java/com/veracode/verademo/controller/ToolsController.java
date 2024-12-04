@@ -31,6 +31,9 @@ public class ToolsController {
 	@Autowired
 	ServletContext context;
 
+	private static final List<String> allowedFortuneFiles = Arrays.asList("literature", "computers", "science",
+			"sports");
+
 	@RequestMapping(value = "/tools", method = RequestMethod.GET)
 	public String tools() {
 		return "tools";
@@ -71,14 +74,9 @@ public class ToolsController {
 
 	private String fortune(String fortuneFile) {
 		String output = "";
-		ProcessBuilder pb = new ProcessBuilder("/bin/fortune", fortuneFile);
-		Map<String, String> env = pb.environment();
-		env.forEach((key, value) -> System.out.println(key + ": " + value));
-		Process proc;
-		try {
-			proc = pb.start();
-			proc.waitFor(5, TimeUnit.SECONDS);
-
+		String[] cmd = {"/bin/fortune", fortuneFile};  
+		try {         
+			Process proc = Runtime.getRuntime().exec(cmd);
 			InputStreamReader isr = new InputStreamReader(proc.getInputStream());
 			BufferedReader br = new BufferedReader(isr);
 			String line;
@@ -86,8 +84,6 @@ public class ToolsController {
 				output += line + "\n";
 			}
 		} catch (IOException ex) {
-			logger.error(ex);
-		} catch (InterruptedException ex) {
 			logger.error(ex);
 		}
 
