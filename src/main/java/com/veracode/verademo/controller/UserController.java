@@ -11,6 +11,8 @@ import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -607,21 +609,19 @@ public class UserController {
 			}
 
 			try {
-				String originalFilename = file.getOriginalFilename();
-				if (originalFilename == null || !originalFilename.matches("^[a-zA-Z0-9._-]+$")) {
-					throw new IllegalArgumentException("Invalid file name");
+				String extension = FilenameUtils.getExtension(file.getOriginalFilename());
+				if (!extension.equalsIgnoreCase("png")) {
+					throw new IllegalArgumentException("Invalid file type");
 				}
-				String safeFileName = FilenameUtils.getName(originalFilename);
-				String extension = safeFileName.substring(safeFileName.lastIndexOf("."));
-				String path = imageDir + username + extension;
-
-				File imageFile = new File(path);
-				if (!imageFile.getCanonicalPath().startsWith(imageDir)) {
+				String safeFileName = FilenameUtils.getName(username + "." + extension);
+				Path path = Paths.get(imageDir, safeFileName).normalize().toAbsolutePath();
+				if (!path.startsWith(Paths.get(imageDir).toAbsolutePath())) {
 					throw new SecurityException("Potential path traversal attempt detected");
 				}
 
 				logger.info("Saving new profile image: " + path);
-				file.transferTo(imageFile);
+
+				file.transferTo(path.toFile());
 			} catch (IllegalStateException | IOException ex) {
 				logger.error(ex);
 			}
@@ -653,17 +653,20 @@ public class UserController {
 			throw new IllegalArgumentException("Invalid file name");
 		}
 		String safeFileName = FilenameUtils.getName(imageName);
-		String path = context.getRealPath("/resources/images") + File.separator + safeFileName;
+		Path basePath = Paths.get(context.getRealPath("/resources/images"));
+		Path resolvedPath = basePath.resolve(safeFileName).normalize();
 
+		if (!resolvedPath.startsWith(basePath)) {
+			throw new SecurityException("Potential path traversal attempt detected");
+		}
+
+		String path = resolvedPath.toString();
 		logger.info("Fetching profile image: " + path);
 
 		InputStream inputStream = null;
 		OutputStream outStream = null;
 		try {
-			File downloadFile = new File(path);
-			if (!downloadFile.getCanonicalPath().startsWith(context.getRealPath("/resources/images"))) {
-				throw new SecurityException("Potential path traversal attempt detected");
-			}
+			File downloadFile = resolvedPath.toFile();
 			inputStream = new FileInputStream(downloadFile);
 
 			String mimeType = context.getMimeType(path);
@@ -769,10 +772,6 @@ public class UserController {
 		oldUsername = oldUsername.toLowerCase();
 		newUsername = newUsername.toLowerCase();
 
-		if (!oldUsername.matches("^[a-zA-Z0-9_-]+$") || !newUsername.matches("^[a-zA-Z0-9_-]+$")) {
-			throw new IllegalArgumentException("Invalid username");
-		}
-
 		Connection connect = null;
 		List<PreparedStatement> sqlUpdateQueries = new ArrayList<PreparedStatement>();
 		try {
@@ -804,16 +803,16 @@ public class UserController {
 				logger.info("Renaming profile image from " + oldImage + " to " + newUsername + extension);
 				String path = context.getRealPath("/resources/images") + File.separator;
 
-				String safeOldImage = FilenameUtils.getName(oldImage);
-				String safeNewImage = FilenameUtils.getName(newUsername + extension);
+				if (!newUsername.matches("^[a-zA-Z0-9_-]+$")) {
+					throw new IllegalArgumentException("Invalid file name");
+				}
+				String safeFileName = FilenameUtils.getName(newUsername + extension);
 
-				File oldName = new File(path + safeOldImage);
-				File newName = new File(path + safeNewImage);
-
-				if (!oldName.getCanonicalPath().startsWith(path) || !newName.getCanonicalPath().startsWith(path)) {
+				File oldName = new File(path + oldImage);
+				File newName = new File(path, safeFileName);
+				if (!newName.getCanonicalPath().startsWith(path)) {
 					throw new SecurityException("Potential path traversal attempt detected");
 				}
-
 				oldName.renameTo(newName);
 			}
 
