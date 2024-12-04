@@ -11,10 +11,6 @@ import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -87,8 +83,12 @@ public class UserController {
 			HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
 		if (httpRequest.getSession().getAttribute("username") != null) {
 			logger.info("User is already logged in - redirecting...");
-			if (target != null && !target.isEmpty() && !target.equals("null") && isValidTarget(target)) {
-				return "redirect:" + target;
+			if (target != null && !target.isEmpty() && !target.equals("null")) {
+				String safeTarget = FilenameUtils.getName(target);
+				if (!safeTarget.matches("^[a-zA-Z0-9_-]+$")) {
+					throw new IllegalArgumentException("Invalid target");
+				}
+				return "redirect:" + safeTarget;
 			} else {
 				return Utils.redirect("feed");
 			}
@@ -98,8 +98,12 @@ public class UserController {
 		if (user != null) {
 			Utils.setSessionUserName(httpRequest, httpResponse, user.getUserName());
 			logger.info("User is remembered - redirecting...");
-			if (target != null && !target.isEmpty() && !target.equals("null") && isValidTarget(target)) {
-				return "redirect:" + target;
+			if (target != null && !target.isEmpty() && !target.equals("null")) {
+				String safeTarget = FilenameUtils.getName(target);
+				if (!safeTarget.matches("^[a-zA-Z0-9_-]+$")) {
+					throw new IllegalArgumentException("Invalid target");
+				}
+				return "redirect:" + safeTarget;
 			} else {
 				return Utils.redirect("feed");
 			}
@@ -122,10 +126,6 @@ public class UserController {
 		return "login";
 	}
 
-	private boolean isValidTarget(String target) {
-		return target.matches("^[a-zA-Z0-9_\\-]{1,255}$");
-	}
-
 	/**
 	 * @param username
 	 * @param password
@@ -142,8 +142,10 @@ public class UserController {
 		logger.info("Entering processLogin");
 
 		String nextView;
-		if (target != null && !target.isEmpty() && !target.equals("null")
-				&& target.matches("^[a-zA-Z0-9_\\-]{1,255}$")) {
+		if (target != null && !target.isEmpty() && !target.equals("null")) {
+			if (!target.matches("^[a-zA-Z0-9/_-]+$")) {
+				throw new IllegalArgumentException("Invalid target path");
+			}
 			nextView = "redirect:" + target;
 		} else {
 			nextView = Utils.redirect("feed");
@@ -392,7 +394,7 @@ public class UserController {
 	}
 
 	private boolean isValidName(String name) {
-		return name != null && name.matches("^[a-zA-Z0-9_-]{1,255}$");
+		return name != null && name.matches("^[a-zA-Z0-9_-]+$");
 	}
 
 	private void emailUser(String username) {
@@ -517,187 +519,191 @@ public class UserController {
 
 	@RequestMapping(value = "/profile", method = RequestMethod.POST, produces = "application/json")
 	@ResponseBody
-	public String processProfile(
-	        @RequestParam(value = "realName", required = true) String realName,
-	        @RequestParam(value = "blabName", required = true) String blabName,
-	        @RequestParam(value = "username", required = true) String username,
-	        @RequestParam(value = "file", required = false) MultipartFile file,
-	        MultipartHttpServletRequest request,
-	        HttpServletResponse response) throws ValidationException {
-	    logger.info("Entering processProfile");
+	public String processProfile(@RequestParam(value = "realName", required = true) String realName,
+			@RequestParam(value = "blabName", required = true) String blabName,
+			@RequestParam(value = "username", required = true) String username,
+			@RequestParam(value = "file", required = false) MultipartFile file, MultipartHttpServletRequest request,
+			HttpServletResponse response) {
+		logger.info("Entering processProfile");
 
-	    String sessionUsername = (String) request.getSession().getAttribute("username");
-	    if (sessionUsername == null) {
-	        logger.info("User is not Logged In - redirecting...");
-	        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-	        return "{\"message\": \"<script>alert('Error - please login');</script>\"}";
-	    }
+		String sessionUsername = (String) request.getSession().getAttribute("username");
+		if (sessionUsername == null) {
+			logger.info("User is not Logged In - redirecting...");
+			response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+			return "{\"message\": \"<script>alert('Error - please login');</script>\"}";
+		}
 
-	    logger.info("User is Logged In - continuing... UA=" + request.getHeader("User-Agent") + " U=" + sessionUsername);
+		logger.info(
+				"User is Logged In - continuing... UA=" + request.getHeader("User-Agent") + " U=" + sessionUsername);
 
-	    String oldUsername = sessionUsername;
+		String oldUsername = sessionUsername;
 
-	    Connection connect = null;
-	    PreparedStatement update = null;
-	    try {
-	        logger.info("Getting Database connection");
-	        Class.forName("com.mysql.jdbc.Driver");
-	        connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
+		Connection connect = null;
+		PreparedStatement update = null;
+		try {
+			logger.info("Getting Database connection");
+			Class.forName("com.mysql.jdbc.Driver");
+			connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
 
-	        logger.info("Preparing the update Prepared Statement");
-	        update = connect.prepareStatement("UPDATE users SET real_name=?, blab_name=? WHERE username=?;");
-	        update.setString(1, realName);
-	        update.setString(2, blabName);
-	        update.setString(3, sessionUsername);
+			logger.info("Preparing the update Prepared Statement");
+			update = connect.prepareStatement("UPDATE users SET real_name=?, blab_name=? WHERE username=?;");
+			update.setString(1, realName);
+			update.setString(2, blabName);
+			update.setString(3, sessionUsername);
 
-	        logger.info("Executing the update Prepared Statement");
-	        boolean updateResult = update.execute();
+			logger.info("Executing the update Prepared Statement");
+			boolean updateResult = update.execute();
 
-	        if (updateResult) {
-	            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-	            return "{\"message\": \"<script>alert('An error occurred, please try again.');</script>\"}";
-	        }
-	    } catch (SQLException | ClassNotFoundException ex) {
-	        logger.error(ex);
-	    } finally {
-	        try {
-	            if (update != null) {
-	                update.close();
-	            }
-	        } catch (SQLException exceptSql) {
-	            logger.error(exceptSql);
-	        }
-	        try {
-	            if (connect != null) {
-	                connect.close();
-	            }
-	        } catch (SQLException exceptSql) {
-	            logger.error(exceptSql);
-	        }
-	    }
+			if (updateResult) {
+				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+				return "{\"message\": \"<script>alert('An error occurred, please try again.');</script>\"}";
+			}
+		} catch (SQLException | ClassNotFoundException ex) {
+			logger.error(ex);
+		} finally {
+			try {
+				if (update != null) {
+					update.close();
+				}
+			} catch (SQLException exceptSql) {
+				logger.error(exceptSql);
+			}
+			try {
+				if (connect != null) {
+					connect.close();
+				}
+			} catch (SQLException exceptSql) {
+				logger.error(exceptSql);
+			}
+		}
 
-	    if (!username.equals(oldUsername)) {
-	        if (usernameExists(username)) {
-	            response.setStatus(HttpServletResponse.SC_CONFLICT);
-	            return "{\"message\": \"<script>alert('That username already exists. Please try another.');</script>\"}";
-	        }
+		if (!username.equals(oldUsername)) {
+			if (usernameExists(username)) {
+				response.setStatus(HttpServletResponse.SC_CONFLICT);
+				return "{\"message\": \"<script>alert('That username already exists. Please try another.');</script>\"}";
+			}
 
-	        if (!updateUsername(oldUsername, username)) {
-	            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-	            return "{\"message\": \"<script>alert('An error occurred, please try again.');</script>\"}";
-	        }
+			if (!updateUsername(oldUsername, username)) {
+				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+				return "{\"message\": \"<script>alert('An error occurred, please try again.');</script>\"}";
+			}
 
-	        Utils.setSessionUserName(request, response, username);
-	        Utils.setUsernameCookie(response, username);
+			Utils.setSessionUserName(request, response, username);
+			Utils.setUsernameCookie(response, username);
 
-	        User currentUser = UserFactory.createFromRequest(request);
-	        if (currentUser != null) {
-	            currentUser.setUserName(username);
-	            UserFactory.updateInResponse(currentUser, response);
-	        }
-	    }
+			User currentUser = UserFactory.createFromRequest(request);
+			if (currentUser != null) {
+				currentUser.setUserName(username);
+				UserFactory.updateInResponse(currentUser, response);
+			}
+		}
 
-	    if (file != null && !file.isEmpty()) {
-	        String imageDir = context.getRealPath("/resources/images") + File.separator;
+		if (file != null && !file.isEmpty()) {
+			String imageDir = context.getRealPath("/resources/images") + File.separator;
 
-	        String oldImage = getProfileImageNameFromUsername(username);
-	        if (oldImage != null) {
-	            new File(imageDir + oldImage).delete();
-	        }
+			String oldImage = getProfileImageNameFromUsername(username);
+			if (oldImage != null) {
+				new File(imageDir + oldImage).delete();
+			}
 
-	        try {
-	            String originalFilename = file.getOriginalFilename();
-	            String sanitizedFileName = FilenameUtils.getName(originalFilename);
-	            if (!isValidFileName(sanitizedFileName)) {
-	                throw new IllegalArgumentException("Invalid filename");
-	            }
+			try {
+				String originalFilename = file.getOriginalFilename();
+				if (originalFilename == null || !originalFilename.matches("^[a-zA-Z0-9._-]+$")) {
+					throw new IllegalArgumentException("Invalid file name");
+				}
+				String safeFileName = FilenameUtils.getName(originalFilename);
+				String extension = safeFileName.substring(safeFileName.lastIndexOf("."));
+				String path = imageDir + username + extension;
 
-	            String extension = sanitizedFileName.substring(sanitizedFileName.lastIndexOf("."));
-	            Path basePath = Paths.get(imageDir).toRealPath();
-	            Path userPath = basePath.resolve(username + extension).normalize();
-	            if (!userPath.startsWith(basePath)) {
-	                throw new SecurityException("Unauthorized file access attempt!");
-	            }
+				File imageFile = new File(path);
+				if (!imageFile.getCanonicalPath().startsWith(imageDir)) {
+					throw new SecurityException("Potential path traversal attempt detected");
+				}
 
-	            logger.info("Saving new profile image: " + userPath.toString());
+				logger.info("Saving new profile image: " + path);
+				file.transferTo(imageFile);
+			} catch (IllegalStateException | IOException ex) {
+				logger.error(ex);
+			}
+		}
 
-	            file.transferTo(userPath.toFile());
-	        } catch (IllegalStateException | IOException ex) {
-	            logger.error(ex);
-	        }
-	    }
-
-	    response.setStatus(HttpServletResponse.SC_OK);
-	    String msg = "Successfully changed values!\\\\nusername: %1$s\\\\nReal Name: %2$s\\\\nBlab Name: %3$s";
-	    String respTemplate = "{\"values\": {\"username\": \"%1$s\", \"realName\": \"%2$s\", \"blabName\": \"%3$s\"}, \"message\": \"<script>alert('"
-	            + msg + "');</script>\"}";
-	    return String.format(respTemplate, username.toLowerCase(), realName, blabName);
-	}
-
-	private boolean isValidFileName(String fileName) {
-	    return fileName.matches("^[a-zA-Z0-9._-]+\\.(txt|json|jpg|gif|png)$");
+		response.setStatus(HttpServletResponse.SC_OK);
+		String msg = "Successfully changed values!\\\\nusername: %1$s\\\\nReal Name: %2$s\\\\nBlab Name: %3$s";
+		String respTemplate = "{\"values\": {\"username\": \"%1$s\", \"realName\": \"%2$s\", \"blabName\": \"%3$s\"}, \"message\": \"<script>alert('"
+				+ msg + "');</script>\"}";
+		return String.format(respTemplate, username.toLowerCase(), realName, blabName);
 	}
 
 	@RequestMapping(value = "/downloadprofileimage", method = RequestMethod.GET)
-	public String downloadImage(
-	        @RequestParam(value = "image", required = true) String imageName,
-	        HttpServletRequest request,
-	        HttpServletResponse response) {
-	    logger.info("Entering downloadImage");
+	public String downloadImage(@RequestParam(value = "image", required = true) String imageName,
+			HttpServletRequest request, HttpServletResponse response) {
+		logger.info("Entering downloadImage");
 
-	    String sessionUsername = (String) request.getSession().getAttribute("username");
-	    if (sessionUsername == null) {
-	        logger.info("User is not Logged In - redirecting...");
-	        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-	        return Utils.redirect("login?target=profile");
-	    }
+		String sessionUsername = (String) request.getSession().getAttribute("username");
+		if (sessionUsername == null) {
+			logger.info("User is not Logged In - redirecting...");
+			response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+			return Utils.redirect("login?target=profile");
+		}
 
-	    logger.info("User is Logged In - continuing... UA=" + request.getHeader("User-Agent") + " U=" + sessionUsername);
+		logger.info(
+				"User is Logged In - continuing... UA=" + request.getHeader("User-Agent") + " U=" + sessionUsername);
 
-	    String baseDir = context.getRealPath("/resources/images");
-	    try {
-	        Path basePath = Paths.get(baseDir).toRealPath();
+		if (imageName == null || !imageName.matches("^[a-zA-Z0-9_-]+$")) {
+			throw new IllegalArgumentException("Invalid file name");
+		}
+		String safeFileName = FilenameUtils.getName(imageName);
+		String path = context.getRealPath("/resources/images") + File.separator + safeFileName;
 
-	        String sanitizedFileName = FilenameUtils.getName(imageName);
-	        if (!isValidFileNamee(sanitizedFileName)) {
-	            throw new IllegalArgumentException("Invalid filename");
-	        }
+		logger.info("Fetching profile image: " + path);
 
-	        Path userPath = basePath.resolve(sanitizedFileName).normalize();
-	        if (!userPath.startsWith(basePath)) {
-	            throw new SecurityException("Unauthorized file access attempt!");
-	        }
+		InputStream inputStream = null;
+		OutputStream outStream = null;
+		try {
+			File downloadFile = new File(path);
+			if (!downloadFile.getCanonicalPath().startsWith(context.getRealPath("/resources/images"))) {
+				throw new SecurityException("Potential path traversal attempt detected");
+			}
+			inputStream = new FileInputStream(downloadFile);
 
-	        File downloadFile = userPath.toFile();
-	        try (InputStream inputStream = new FileInputStream(downloadFile);
-	             OutputStream outStream = response.getOutputStream()) {
+			String mimeType = context.getMimeType(path);
+			if (mimeType == null) {
+				mimeType = "application/octet-stream";
+			}
+			logger.info("MIME type: " + mimeType);
 
-	            String mimeType = context.getMimeType(userPath.toString());
-	            if (mimeType == null) {
-	                mimeType = "application/octet-stream";
-	            }
-	            logger.info("MIME type: " + mimeType);
+			response.setContentType(mimeType);
+			response.setContentLength((int) downloadFile.length());
+			response.setHeader("Content-Disposition", "attachment; filename=" + safeFileName);
 
-	            response.setContentType(mimeType);
-	            response.setContentLength((int) downloadFile.length());
-	            response.setHeader("Content-Disposition", "attachment; filename=" + sanitizedFileName);
+			outStream = response.getOutputStream();
+			byte[] buffer = new byte[4096];
+			int bytesRead = -1;
 
-	            byte[] buffer = new byte[4096];
-	            int bytesRead;
-	            while ((bytesRead = inputStream.read(buffer)) != -1) {
-	                outStream.write(buffer, 0, bytesRead);
-	            }
-	            outStream.flush();
-	        }
-	    } catch (Exception ex) {
-	        logger.error(ex);
-	    }
+			while ((bytesRead = inputStream.read(buffer)) != -1) {
+				outStream.write(buffer, 0, bytesRead);
+			}
+			outStream.flush();
+		} catch (IllegalStateException | IOException ex) {
+			logger.error(ex);
+		} finally {
+			try {
+				if (inputStream != null) {
+					inputStream.close();
+				}
+			} catch (IOException ex) {
+				logger.error(ex);
+			}
+			try {
+				if (outStream != null) {
+					outStream.close();
+				}
+			} catch (IOException ex) {
+				logger.error(ex);
+			}
+		}
 
-	    return "profile";
-	}
-
-	private boolean isValidFileNamee(String fileName) {
-	    return fileName.matches("^[a-zA-Z0-9._-]+\\.(jpg|jpeg|png|gif)$");
+		return "profile";
 	}
 
 	/**
@@ -760,89 +766,82 @@ public class UserController {
 	 * @throws ValidationException
 	 */
 	private boolean updateUsername(String oldUsername, String newUsername) {
-	    oldUsername = oldUsername.toLowerCase();
-	    newUsername = newUsername.toLowerCase();
+		oldUsername = oldUsername.toLowerCase();
+		newUsername = newUsername.toLowerCase();
 
-	    Connection connect = null;
-	    List<PreparedStatement> sqlUpdateQueries = new ArrayList<PreparedStatement>();
-	    try {
-	        logger.info("Getting Database connection");
-	        Class.forName("com.mysql.jdbc.Driver");
-	        connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
-	        connect.setAutoCommit(false);
+		if (!oldUsername.matches("^[a-zA-Z0-9_-]+$") || !newUsername.matches("^[a-zA-Z0-9_-]+$")) {
+			throw new IllegalArgumentException("Invalid username");
+		}
 
-	        String[] sqlStrQueries = new String[] {
-	                "UPDATE users SET username=? WHERE username=?",
-	                "UPDATE blabs SET blabber=? WHERE blabber=?",
-	                "UPDATE comments SET blabber=? WHERE blabber=?",
-	                "UPDATE listeners SET blabber=? WHERE blabber=?",
-	                "UPDATE listeners SET listener=? WHERE listener=?",
-	                "UPDATE users_history SET blabber=? WHERE blabber=?" };
-	        for (String sql : sqlStrQueries) {
-	            logger.info("Preparing the Prepared Statement: " + sql);
-	            sqlUpdateQueries.add(connect.prepareStatement(sql));
-	        }
+		Connection connect = null;
+		List<PreparedStatement> sqlUpdateQueries = new ArrayList<PreparedStatement>();
+		try {
+			logger.info("Getting Database connection");
+			Class.forName("com.mysql.jdbc.Driver");
+			connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
+			connect.setAutoCommit(false);
 
-	        for (PreparedStatement stmt : sqlUpdateQueries) {
-	            stmt.setString(1, newUsername);
-	            stmt.setString(2, oldUsername);
-	            stmt.executeUpdate();
-	        }
-	        connect.commit();
+			String[] sqlStrQueries = new String[] { "UPDATE users SET username=? WHERE username=?",
+					"UPDATE blabs SET blabber=? WHERE blabber=?", "UPDATE comments SET blabber=? WHERE blabber=?",
+					"UPDATE listeners SET blabber=? WHERE blabber=?",
+					"UPDATE listeners SET listener=? WHERE listener=?",
+					"UPDATE users_history SET blabber=? WHERE blabber=?" };
+			for (String sql : sqlStrQueries) {
+				logger.info("Preparing the Prepared Statement: " + sql);
+				sqlUpdateQueries.add(connect.prepareStatement(sql));
+			}
 
-	        String oldImage = getProfileImageNameFromUsername(oldUsername);
-	        if (oldImage != null) {
-	            String extension = oldImage.substring(oldImage.lastIndexOf("."));
-	            logger.info("Renaming profile image from " + oldImage + " to " + newUsername + extension);
-	            String path = context.getRealPath("/resources/images") + File.separator;
+			for (PreparedStatement stmt : sqlUpdateQueries) {
+				stmt.setString(1, newUsername);
+				stmt.setString(2, oldUsername);
+				stmt.executeUpdate();
+			}
+			connect.commit();
 
-	            Path basePath = Paths.get(path).toRealPath();
-	            String sanitizedOldImage = FilenameUtils.getName(oldImage);
-	            String sanitizedNewImage = FilenameUtils.getName(newUsername + extension);
+			String oldImage = getProfileImageNameFromUsername(oldUsername);
+			if (oldImage != null) {
+				String extension = oldImage.substring(oldImage.lastIndexOf("."));
+				logger.info("Renaming profile image from " + oldImage + " to " + newUsername + extension);
+				String path = context.getRealPath("/resources/images") + File.separator;
 
-	            if (!isValidFile(sanitizedOldImage) || !isValidFile(sanitizedNewImage)) {
-	                throw new IllegalArgumentException("Invalid filename");
-	            }
+				String safeOldImage = FilenameUtils.getName(oldImage);
+				String safeNewImage = FilenameUtils.getName(newUsername + extension);
 
-	            Path oldNamePath = basePath.resolve(sanitizedOldImage).normalize();
-	            Path newNamePath = basePath.resolve(sanitizedNewImage).normalize();
+				File oldName = new File(path + safeOldImage);
+				File newName = new File(path + safeNewImage);
 
-	            if (!oldNamePath.startsWith(basePath) || !newNamePath.startsWith(basePath)) {
-	                throw new SecurityException("Unauthorized file access attempt!");
-	            }
+				if (!oldName.getCanonicalPath().startsWith(path) || !newName.getCanonicalPath().startsWith(path)) {
+					throw new SecurityException("Potential path traversal attempt detected");
+				}
 
-	            Files.move(oldNamePath, newNamePath, StandardCopyOption.REPLACE_EXISTING);
-	        }
+				oldName.renameTo(newName);
+			}
 
-	        return true;
-	    } catch (SQLException | ClassNotFoundException | IOException ex) {
-	        logger.error(ex);
-	    } finally {
-	        try {
-	            if (sqlUpdateQueries != null) {
-	                for (PreparedStatement stmt : sqlUpdateQueries) {
-	                    stmt.close();
-	                }
-	            }
-	        } catch (SQLException e) {
-	            logger.error(e);
-	        }
-	        try {
-	            if (connect != null) {
-	                logger.error("Transaction is being rolled back");
-	                connect.rollback();
-	                connect.close();
-	            }
-	        } catch (SQLException e) {
-	            logger.error(e);
-	        }
-	    }
+			return true;
+		} catch (SQLException | ClassNotFoundException | IOException ex) {
+			logger.error(ex);
+		} finally {
+			try {
+				if (sqlUpdateQueries != null) {
+					for (PreparedStatement stmt : sqlUpdateQueries) {
+						stmt.close();
+					}
+				}
+			} catch (SQLException e) {
+				logger.error(e);
+			}
+			try {
+				if (connect != null) {
+					logger.error("Transaction is being rolled back");
+					connect.rollback();
+					connect.close();
+				}
+			} catch (SQLException e) {
+				logger.error(e);
+			}
+		}
 
-	    return false;
-	}
-
-	private boolean isValidFile(String fileName) {
-	    return fileName.matches("^[a-zA-Z0-9._-]+$");
+		return false;
 	}
 
 	private String getProfileImageNameFromUsername(final String username) {
